@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: miami-2027-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_PATH
+        value: data/miami2027.sqlite
+      - key: CORS_ORIGINS
+        value: "*"
+
