@@ -19,7 +19,7 @@ export default function GtaIntroOverlay({ onEnter }) {
           style={{
             color: 'var(--neon-cyan)',
             fontSize: '42px',
-            marginBottom: '-12px',
+            marginBottom: '-5px',
             transform: 'rotate(-4deg)',
           }}
         >
@@ -39,28 +39,10 @@ export default function GtaIntroOverlay({ onEnter }) {
           MIAMI 2027
         </h1>
 
-        <p
-          style={{
-            fontSize: '18px',
-            color: '#e4e4e7',
-            maxWidth: '560px',
-            margin: '0 auto 28px auto',
-            lineHeight: 1.6,
-          }}
-        >
-          <strong>Lionel Messi</strong> no Inter Miami • <strong>Fórmula 1 GP de Miami</strong> •{' '}
-          <strong>Vice City Lifestyle</strong>. Prepare o som: a rádio de Vice City vai tocar durante
-          toda a convocação.
-        </p>
-
         <button type="button" className="gta-btn-primary" onClick={onEnter}>
           <i className="fa-solid fa-play" style={{ marginRight: '10px' }} />
-          ENTRAR EM VICE CITY (LIGAR RÁDIO)
+          ENTRAR EM VICE CITY
         </button>
-
-        <p style={{ fontSize: '13px', color: '#a1a1aa', marginTop: '18px', letterSpacing: '1px' }}>
-          🎵 ÁUDIO CONTÍNUO ATIVADO + DOSSIÊ REAL DE VOOS, AIRBNB E ROTEIRO
-        </p>
       </div>
     </div>
   );

@@ -166,7 +166,7 @@ const FALLBACK_TRIP_DATA = {
     },
     {
       phase: 'DIAS 5 A 8 — MEIO DA SEMANA',
-      title: 'Vice City Lifestyle & Compras',
+      title: 'Miami Lifestyle & Compras',
       location: 'Miami Beach, Brickell, Wynwood & Fort Lauderdale',
       details:
         'Praia em South Beach, pôr do sol no South Pointe Pier, tarde em Wynwood Walls + Coyo Taco, noite nas baladas/rooftops e dia de compras pesadas no Sawgrass Mills.',
@@ -447,7 +447,7 @@ export default function App() {
             style={{
               color: 'var(--neon-cyan)',
               fontSize: 'clamp(36px, 5vw, 56px)',
-              margin: '0 0 -18px 0',
+              margin: '0 0 15px 0',
               transform: 'rotate(-4deg)',
             }}
           >
@@ -479,7 +479,7 @@ export default function App() {
             }}
           >
             LIONEL MESSI <span style={{ color: 'var(--neon-cyan)' }}>•</span> FÓRMULA 1 GP{' '}
-            <span style={{ color: 'var(--neon-pink)' }}>•</span> VICE CITY LIFESTYLE
+            <span style={{ color: 'var(--neon-pink)' }}>•</span> MIAMI LIFESTYLE
           </p>
 
           <div className="reveal" style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -534,7 +534,7 @@ export default function App() {
                 textShadow: '0 2px 10px rgba(0,0,0,0.9)',
               }}
             >
-              Nada de turismo genérico. Vamos alinhar na mesma janela de <strong>Maio de 2027</strong> os dois maiores
+              Uma viagem para guardar na memória: Vamos alinhar na mesma janela de <strong>Maio de 2027</strong> dois dos maiores
               espetáculos do planeta na Flórida: <strong>Fórmula 1 no Hard Rock Stadium</strong> e{' '}
               <strong>Lionel Messi ao vivo pelo Inter Miami</strong>, vivendo a estética real de GTA VI / Vice City.
             </p>
@@ -698,7 +698,7 @@ export default function App() {
             Baladas • Miami Beach • Wynwood • Fort Lauderdale
           </p>
           <h2 className="gta-title" style={{ fontSize: 'clamp(30px, 4.2vw, 52px)', color: '#fff', lineHeight: 1 }}>
-            <span className="neon-text-orange">VICE CITY</span> LIFESTYLE & PASSEIOS
+            <span className="neon-text-orange">MIAMI</span> LIFESTYLE & PASSEIOS
           </h2>
         </div>
 
@@ -1220,11 +1220,10 @@ export default function App() {
       >
         <div className="reveal" style={{ maxWidth: '900px', marginBottom: '40px' }}>
           <h2 className="gta-title neon-text-pink" style={{ fontSize: 'clamp(56px, 9vw, 110px)', lineHeight: 0.95 }}>
-            QUEM VAMOS?
+            QUEM TÁ DENTRO?
           </h2>
           <p style={{ fontSize: '20px', color: '#fafafa', marginTop: '14px', fontWeight: 600 }}>
-            Clique no seu nome na lista de convocados ou preencha seu e-mail abaixo para entrar em{' '}
-            <strong>TÁ DENTRO</strong> e receber o <strong>Dossiê Completo Miami 2027</strong>!
+            Clique no seu nome na lista de convocados ou preencha seu e-mail abaixo para entrar na lista e receber o <strong>Dossiê Completo Miami 2027</strong>
           </p>
         </div>
 
