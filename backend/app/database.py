@@ -1,4 +1,6 @@
-"""Adaptador de banco de dados SQLite para persistência dos participantes da viagem.
+"""Adaptador de banco de dados para persistência dos participantes da viagem.
+Suporta Neon Postgres (quando DATABASE_URL estiver configurado) com fallback
+automático para SQLite para testes locais e desenvolvimento offline.
 Isola os efeitos colaterais de escrita e leitura em disco das regras de negócio."""
 
 from __future__ import annotations
@@ -8,6 +10,19 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
+
+# Carrega .env.local da raiz do projeto (gerado pelo neon deploy) e backend/.env
+_root_env_local = Path(__file__).resolve().parent.parent.parent / ".env.local"
+if _root_env_local.exists():
+    load_dotenv(_root_env_local)
+
+_backend_env = Path(__file__).resolve().parent.parent / ".env"
+if _backend_env.exists():
+    load_dotenv(_backend_env)
+else:
+    load_dotenv()
 
 
 DEFAULT_SEED_PARTICIPANTS = [
@@ -50,6 +65,39 @@ DEFAULT_SEED_PARTICIPANTS = [
 ]
 
 
+def is_postgres(custom_path: str | Path | None = None) -> bool:
+    """[System]
+    Determina se a persistência deve utilizar o Neon Postgres ou SQLite local.
+    Se custom_path for fornecido explicitamente e não for uma URL postgres,
+    força o uso do SQLite (essencial para testes isolados com tmp_path).
+
+    args:
+        custom_path: Caminho opcional sobrescrevendo a configuração padrão.
+
+    why:
+        Garantir que a aplicação use o Neon Postgres em produção/desenvolvimento
+        e SQLite isolado em testes automatizados.
+    """
+    if custom_path:
+        str_path = str(custom_path)
+        if not (str_path.startswith("postgres://") or str_path.startswith("postgresql://")):
+            return False
+
+    db_url = os.getenv("DATABASE_URL", "").strip()
+    return bool(db_url.startswith("postgres://") or db_url.startswith("postgresql://"))
+
+
+def get_pg_connection(db_url: str | None = None):
+    """[System]
+    Abre uma conexão com o Neon Postgres utilizando o driver psycopg v3 com dict_row.
+    """
+    import psycopg
+    from psycopg.rows import dict_row
+
+    url = db_url or os.getenv("DATABASE_URL")
+    return psycopg.connect(url, row_factory=dict_row)
+
+
 def get_db_path(custom_path: str | Path | None = None) -> Path:
     """[System]
     Resolve o caminho do banco SQLite e garante a existência do diretório pai.
@@ -72,12 +120,13 @@ def get_db_path(custom_path: str | Path | None = None) -> Path:
     return path_obj
 
 
-def init_db(custom_path: str | Path | None = None) -> Path:
+def init_db(custom_path: str | Path | None = None) -> str | Path:
     """[System]
     Cria a tabela de participantes caso não exista e popula a carga inicial.
+    Suporta Neon Postgres e SQLite.
 
     args:
-        custom_path: Caminho opcional do arquivo SQLite.
+        custom_path: Caminho opcional do arquivo SQLite ou URL de conexão.
 
     why:
         Garantir que a aplicação funcione na primeira execução sem necessidade de migração manual.
@@ -85,6 +134,43 @@ def init_db(custom_path: str | Path | None = None) -> Path:
     example:
         init_db()
     """
+    if is_postgres(custom_path):
+        with get_pg_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS participants (
+                        id SERIAL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        email TEXT,
+                        status TEXT NOT NULL DEFAULT 'invited',
+                        role_style TEXT NOT NULL DEFAULT 'Vice City VIP',
+                        confirmed_at TEXT
+                    );
+                    """
+                )
+                cur.execute("SELECT COUNT(*) AS count FROM participants;")
+                row = cur.fetchone()
+                count = row["count"] if row else 0
+                if count == 0:
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    for item in DEFAULT_SEED_PARTICIPANTS:
+                        cur.execute(
+                            """
+                            INSERT INTO participants (name, email, status, role_style, confirmed_at)
+                            VALUES (%s, %s, %s, %s, %s);
+                            """,
+                            (
+                                item["name"],
+                                item["email"],
+                                item["status"],
+                                item["role_style"],
+                                now_iso if item["status"] == "confirmed" else None,
+                            ),
+                        )
+                conn.commit()
+        return os.getenv("DATABASE_URL", "neon-postgres")
+
     db_path = get_db_path(custom_path)
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -126,7 +212,7 @@ def list_all_participants(custom_path: str | Path | None = None) -> list[dict[st
     Consulta todos os participantes cadastrados ordenados por status e identificador.
 
     args:
-        custom_path: Caminho opcional do banco SQLite.
+        custom_path: Caminho opcional do banco SQLite ou URL.
 
     why:
         Fornecer os dados brutos para categorização entre confirmados e convocados.
@@ -134,6 +220,16 @@ def list_all_participants(custom_path: str | Path | None = None) -> list[dict[st
     example:
         rows = list_all_participants()
     """
+    if is_postgres(custom_path):
+        init_db(custom_path)
+        with get_pg_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, name, email, status, role_style, confirmed_at FROM participants ORDER BY id ASC;"
+                )
+                rows = cur.fetchall()
+                return [dict(r) for r in rows]
+
     db_path = init_db(custom_path)
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
@@ -150,7 +246,7 @@ def upsert_confirmed_participant(
     custom_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """[System]
-    Registra ou atualiza um participante como confirmado ('confirmed') no SQLite.
+    Registra ou atualiza um participante como confirmado ('confirmed') no banco.
 
     args:
         name: Nome validado do participante.
@@ -164,9 +260,43 @@ def upsert_confirmed_participant(
     example:
         saved = upsert_confirmed_participant("Lucas Belizario", "lucas@email.com", "Piloto F1")
     """
-    db_path = init_db(custom_path)
     now_iso = datetime.now(timezone.utc).isoformat()
 
+    if is_postgres(custom_path):
+        init_db(custom_path)
+        with get_pg_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM participants WHERE LOWER(email) = LOWER(%s) OR LOWER(name) = LOWER(%s);",
+                    (email, name),
+                )
+                existing = cur.fetchone()
+                if existing:
+                    participant_id = existing["id"]
+                    cur.execute(
+                        """
+                        UPDATE participants
+                        SET name = %s, email = %s, status = 'confirmed', role_style = %s, confirmed_at = %s
+                        WHERE id = %s
+                        RETURNING id, name, email, status, role_style, confirmed_at;
+                        """,
+                        (name, email, role_style, now_iso, participant_id),
+                    )
+                    updated = cur.fetchone()
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO participants (name, email, status, role_style, confirmed_at)
+                        VALUES (%s, %s, 'confirmed', %s, %s)
+                        RETURNING id, name, email, status, role_style, confirmed_at;
+                        """,
+                        (name, email, role_style, now_iso),
+                    )
+                    updated = cur.fetchone()
+                conn.commit()
+                return dict(updated)
+
+    db_path = init_db(custom_path)
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         existing = conn.execute(
@@ -209,7 +339,7 @@ def add_invited_friend(
     custom_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """[System]
-    Adiciona um novo nome na lista de convocados ('Os Convocados') no SQLite.
+    Adiciona um novo nome na lista de convocados ('Os Convocados').
 
     args:
         name: Nome do amigo convocado.
@@ -225,6 +355,22 @@ def add_invited_friend(
     clean_name = (name or "").strip()
     if len(clean_name) < 2:
         raise ValueError("O nome do convidado deve ter pelo menos 2 caracteres.")
+
+    if is_postgres(custom_path):
+        init_db(custom_path)
+        with get_pg_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO participants (name, email, status, role_style, confirmed_at)
+                    VALUES (%s, NULL, 'invited', %s, NULL)
+                    RETURNING id, name, email, status, role_style, confirmed_at;
+                    """,
+                    (clean_name, role_style),
+                )
+                row = cur.fetchone()
+                conn.commit()
+                return dict(row)
 
     db_path = init_db(custom_path)
     with sqlite3.connect(db_path) as conn:
@@ -246,11 +392,11 @@ def add_invited_friend(
 
 def remove_participant_by_id(participant_id: int, custom_path: str | Path | None = None) -> None:
     """[System]
-    Remove um participante pelo seu identificador único no banco SQLite.
+    Remove um participante pelo seu identificador único.
 
     args:
         participant_id: ID numérico do participante na tabela.
-        custom_path: Caminho opcional do banco SQLite.
+        custom_path: Caminho opcional do banco.
 
     why:
         Permitir excluir registros de teste da lista de confirmados ou convocados.
@@ -258,6 +404,14 @@ def remove_participant_by_id(participant_id: int, custom_path: str | Path | None
     example:
         remove_participant_by_id(6)
     """
+    if is_postgres(custom_path):
+        init_db(custom_path)
+        with get_pg_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM participants WHERE id = %s;", (participant_id,))
+                conn.commit()
+        return
+
     db_path = init_db(custom_path)
     with sqlite3.connect(db_path) as conn:
         conn.execute("DELETE FROM participants WHERE id = ?", (participant_id,))

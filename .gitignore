@@ -22,3 +22,4 @@ backend/data/sent_emails/*.html
 *.log
 .pytest_cache/
 
+.neon
