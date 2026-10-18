@@ -61,9 +61,13 @@ app = FastAPI(
 raw_origins = os.getenv("CORS_ORIGINS", "*")
 allowed_origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()] or ["*"]
 
+# Se wildcard '*' estiver presente ou CORS_ORIGINS não definido, permite qualquer subdomínio do onrender.com / vercel.app / localhost
+origin_regex = os.getenv("CORS_ORIGIN_REGEX", r"https://.*\.onrender\.com|https://.*\.vercel\.app|https://.*\.pages\.dev")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=origin_regex if "*" not in allowed_origins else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

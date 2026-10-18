@@ -281,6 +281,7 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [newInviteName, setNewInviteName] = useState('');
+  const [newInviteRole, setNewInviteRole] = useState('');
 
   useEffect(() => {
     fetch(`${API_BASE}/api/trip-data`)
@@ -370,12 +371,16 @@ export default function App() {
       const response = await fetch(`${API_BASE}/api/participants/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newInviteName.trim(), role_style: 'Convocado Vice City' }),
+        body: JSON.stringify({
+          name: newInviteName.trim(),
+          role_style: newInviteRole.trim() || 'Convocado Vice City',
+        }),
       });
       if (response.ok) {
         const data = await response.json();
         setParticipants(data.participants);
         setNewInviteName('');
+        setNewInviteRole('');
       }
     } catch {
       // ignore offline
@@ -1533,29 +1538,51 @@ export default function App() {
               </ul>
             </div>
 
-            <form onSubmit={handleAddInvite} style={{ marginTop: '20px', display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                placeholder="Convocar mais um amigo..."
-                value={newInviteName}
-                onChange={(e) => setNewInviteName(e.target.value)}
-                className="gta-input"
-                style={{ padding: '10px 14px', fontSize: '14px' }}
-              />
-              <button
-                type="submit"
-                style={{
-                  background: 'var(--neon-pink)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '0 16px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                }}
-              >
-                +
-              </button>
+            <form onSubmit={handleAddInvite} style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="Nome do amigo..."
+                  value={newInviteName}
+                  onChange={(e) => setNewInviteName(e.target.value)}
+                  className="gta-input"
+                  style={{ flex: '1 1 160px', padding: '10px 14px', fontSize: '14px' }}
+                  required
+                />
+                <input
+                  type="text"
+                  list="invite-role-suggestions"
+                  placeholder="Papel na missão (ex: Piloto de F1)..."
+                  value={newInviteRole}
+                  onChange={(e) => setNewInviteRole(e.target.value)}
+                  className="gta-input"
+                  style={{ flex: '1 1 200px', padding: '10px 14px', fontSize: '14px' }}
+                />
+                <datalist id="invite-role-suggestions">
+                  <option value="Convocado Vice City" />
+                  <option value="VIP nos Rooftops de Brickell" />
+                  <option value="Magnata de South Beach" />
+                  <option value="Mestre das Compras no Sawgrass" />
+                  <option value="Piloto de Lancha em Biscayne Bay" />
+                </datalist>
+                <button
+                  type="submit"
+                  style={{
+                    background: 'var(--neon-pink)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '10px 18px',
+                    fontWeight: 800,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    letterSpacing: '0.5px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  CONVOCAR +
+                </button>
+              </div>
             </form>
           </div>
         </div>

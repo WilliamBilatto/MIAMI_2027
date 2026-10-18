@@ -128,3 +128,18 @@ def test_api_endpoints_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert dossier_res.status_code == 200
     assert "MIAMI 2027" in dossier_res.text
 
+    # Testa o endpoint de convidar amigo com role_style customizado
+    invite_res = client.post(
+        "/api/participants/invite",
+        json={
+            "name": "Gabriel",
+            "role_style": "Rei de South Beach",
+        },
+    )
+    assert invite_res.status_code == 200
+    invite_body = invite_res.json()
+    assert invite_body["invited"]["name"] == "Gabriel"
+    assert invite_body["invited"]["role_style"] == "Rei de South Beach"
+    assert invite_body["invited"]["status"] == "invited"
+    assert any(p["name"] == "Gabriel" and p["role_style"] == "Rei de South Beach" for p in invite_body["participants"]["invited"])
+
