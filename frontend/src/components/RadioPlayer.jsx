@@ -1,243 +1,403 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-const SPOTIFY_TRACKS = [
-  {
-    id: 'gta6_main',
-    label: 'GTA VI Official Track',
-    uri: 'spotify:track:4HCOHRCSQelz2GPX8iTamO',
-    embedUrl: 'https://open.spotify.com/embed/track/4HCOHRCSQelz2GPX8iTamO?utm_source=generator&theme=0',
-  },
-  {
-    id: 'vice_city_playlist',
-    label: 'Flash FM — Vice City Classics',
-    uri: 'spotify:playlist:1Ver90a8cR5U3pD9eF7hD1',
-    embedUrl: 'https://open.spotify.com/embed/track/2WfaOiMkCvy7F5fcp2zZ8L?utm_source=generator&theme=0',
-  },
-];
+const TRACK = {
+  youtubeId: '5dPwBWvmcbQ',
+  title: 'Flower In A Hurricane',
+  artist: 'Justice ft. Tame Impala, SZA, King Gizzard & the Lizard Wizard',
+  tag: 'GTA VI SOUNDTRACK • FULL TRACK',
+  cover: 'https://i.ytimg.com/vi/5dPwBWvmcbQ/hqdefault.jpg',
+};
+
+const SPOTIFY_GREEN = '#1db954';
+
+/**
+ * Carrega a YouTube IFrame API uma única vez e resolve com o objeto global `YT`.
+ */
+function loadYouTubeApi() {
+  if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+  if (window.__ytApiPromise) return window.__ytApiPromise;
+
+  window.__ytApiPromise = new Promise((resolve) => {
+    const previousCallback = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof previousCallback === 'function') previousCallback();
+      resolve(window.YT);
+    };
+    const script = document.createElement('script');
+    script.id = 'youtube-iframe-api';
+    script.src = 'https://www.youtube.com/iframe_api';
+    script.async = true;
+    document.body.appendChild(script);
+  });
+  return window.__ytApiPromise;
+}
+
+function formatTime(totalSeconds) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '0:00';
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
 
 export default function RadioPlayer({ autoStart }) {
   const [minimized, setMinimized] = useState(false);
-  const [selectedTrackIdx, setSelectedTrackIdx] = useState(0);
-  const [synthBackupActive, setSynthBackupActive] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [needsTap, setNeedsTap] = useState(false);
 
-  const embedRef = useRef(null);
-  const spotifyControllerRef = useRef(null);
-  const audioCtxRef = useRef(null);
-  const timerRef = useRef(null);
-  const stepRef = useRef(0);
+  const hostRef = useRef(null);
+  const playerRef = useRef(null);
+  const autoStartRef = useRef(autoStart);
 
-  const currentTrack = SPOTIFY_TRACKS[selectedTrackIdx];
-
-  // Carrega a API oficial de IFrame do Spotify para disparar .play() automaticamente
+  // Cria o player do YouTube (invisível) assim que o componente monta,
+  // para que ele já esteja pronto quando o visitante clicar em "Entrar em Vice City".
   useEffect(() => {
-    const existingScript = document.getElementById('spotify-iframe-api');
-    if (!existingScript) {
-      const script = document.createElement('script');
-      script.id = 'spotify-iframe-api';
-      script.src = 'https://open.spotify.com/embed/iframe-api/v1';
-      script.async = true;
-      document.body.appendChild(script);
-    }
+    let cancelled = false;
 
-    window.onSpotifyIframeApiReady = (IFrameAPI) => {
-      if (!embedRef.current) return;
-      const options = {
-        uri: currentTrack.uri,
-        width: '100%',
-        height: '80',
-        theme: 'dark',
-      };
-      IFrameAPI.createController(embedRef.current, options, (EmbedController) => {
-        spotifyControllerRef.current = EmbedController;
-        if (autoStart) {
-          try {
-            EmbedController.play();
-          } catch {
-            // fallback
-          }
-        }
+    loadYouTubeApi().then((YT) => {
+      if (cancelled || !hostRef.current) return;
+      playerRef.current = new YT.Player(hostRef.current, {
+        videoId: TRACK.youtubeId,
+        width: '200',
+        height: '113',
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          loop: 1,
+          playlist: TRACK.youtubeId,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
+        },
+        events: {
+          onReady: (event) => {
+            setReady(true);
+            setDuration(event.target.getDuration() || 0);
+            event.target.setVolume(70);
+            if (autoStartRef.current) event.target.playVideo();
+          },
+          onStateChange: (event) => {
+            const { PlayerState } = window.YT;
+            if (event.data === PlayerState.PLAYING) {
+              setPlaying(true);
+              setNeedsTap(false);
+              setDuration(event.target.getDuration() || 0);
+            } else if (event.data === PlayerState.PAUSED || event.data === PlayerState.ENDED) {
+              setPlaying(false);
+            }
+          },
+        },
       });
+    });
+
+    return () => {
+      cancelled = true;
+      if (playerRef.current && typeof playerRef.current.destroy === 'function') {
+        playerRef.current.destroy();
+      }
+      playerRef.current = null;
     };
   }, []);
 
-  // Dispara o play no Spotify assim que o usuário clica em "Entrar em Vice City"
+  // Dispara o play logo após o clique em "Entrar em Vice City".
+  // O clique conta como interação do usuário e a permissão é delegada ao iframe via allow="autoplay".
   useEffect(() => {
-    if (autoStart && spotifyControllerRef.current) {
-      try {
-        spotifyControllerRef.current.play();
-      } catch {
-        // Caso o navegador peça clique direto no iframe
-      }
+    autoStartRef.current = autoStart;
+    if (!autoStart) return undefined;
+
+    if (ready && playerRef.current) playerRef.current.playVideo();
+
+    // Se o navegador ainda assim bloquear, mostra o aviso para um toque no play.
+    const fallbackTimer = setTimeout(() => {
+      const player = playerRef.current;
+      const isPlaying = player && window.YT && player.getPlayerState?.() === window.YT.PlayerState.PLAYING;
+      if (!isPlaying) setNeedsTap(true);
+    }, 2500);
+    return () => clearTimeout(fallbackTimer);
+  }, [autoStart, ready]);
+
+  // Atualiza a barra de progresso enquanto toca.
+  useEffect(() => {
+    if (!playing) return undefined;
+    const interval = setInterval(() => {
+      const player = playerRef.current;
+      if (player?.getCurrentTime) setCurrentTime(player.getCurrentTime());
+    }, 500);
+    return () => clearInterval(interval);
+  }, [playing]);
+
+  const togglePlay = useCallback(() => {
+    const player = playerRef.current;
+    if (!player || !ready) return;
+    if (playing) {
+      player.pauseVideo();
+    } else {
+      player.unMute();
+      setMuted(false);
+      player.playVideo();
     }
-  }, [autoStart]);
+  }, [playing, ready]);
 
-  const switchSpotifyTrack = () => {
-    const nextIdx = (selectedTrackIdx + 1) % SPOTIFY_TRACKS.length;
-    setSelectedTrackIdx(nextIdx);
-    if (spotifyControllerRef.current) {
-      try {
-        spotifyControllerRef.current.loadUri(SPOTIFY_TRACKS[nextIdx].uri);
-        spotifyControllerRef.current.play();
-      } catch {
-        // ignore
-      }
+  const toggleMute = useCallback(() => {
+    const player = playerRef.current;
+    if (!player || !ready) return;
+    if (muted) {
+      player.unMute();
+    } else {
+      player.mute();
     }
-  };
+    setMuted((prev) => !prev);
+  }, [muted, ready]);
 
-  // Sintetizador auxiliar opcional caso o usuário não esteja logado no Spotify no navegador
-  const toggleSynthBackup = () => {
-    if (synthBackupActive) {
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = null;
-      setSynthBackupActive(false);
-      return;
-    }
+  const seekTo = useCallback(
+    (event) => {
+      const player = playerRef.current;
+      if (!player || !ready || !duration) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
+      const target = ratio * duration;
+      player.seekTo(target, true);
+      setCurrentTime(target);
+    },
+    [duration, ready],
+  );
 
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new AudioCtx();
-    }
-    if (audioCtxRef.current.state === 'suspended') {
-      audioCtxRef.current.resume();
-    }
+  const progress = duration ? Math.min((currentTime / duration) * 100, 100) : 0;
 
-    const bassNotes = [55, 55, 65.41, 73.42, 82.41, 82.41, 73.42, 65.41];
-    const arpNotes = [220, 277.18, 329.63, 440, 329.63, 277.18, 246.94, 329.63];
-
-    timerRef.current = setInterval(() => {
-      const ctx = audioCtxRef.current;
-      if (!ctx) return;
-      const now = ctx.currentTime;
-      const step = stepRef.current;
-
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(bassNotes[step % bassNotes.length], now);
-      gain.gain.setValueAtTime(0.08, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.23);
-
-      const arp = ctx.createOscillator();
-      const arpGain = ctx.createGain();
-      arp.type = 'triangle';
-      arp.frequency.setValueAtTime(arpNotes[step % arpNotes.length], now);
-      arpGain.gain.setValueAtTime(0.04, now);
-      arpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-      arp.connect(arpGain);
-      arpGain.connect(ctx.destination);
-      arp.start(now);
-      arp.stop(now + 0.21);
-
-      stepRef.current += 1;
-    }, 260);
-
-    setSynthBackupActive(true);
+  const iconButton = {
+    background: 'transparent',
+    border: 'none',
+    color: '#b3b3b3',
+    cursor: 'pointer',
+    fontSize: '14px',
+    padding: '4px',
   };
 
   return (
     <div className="radio-dock">
+      {/* Player do YouTube invisível: fornece o áudio completo sem exigir login */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          left: '-9999px',
+          bottom: 0,
+          width: '200px',
+          height: '113px',
+          opacity: 0,
+          pointerEvents: 'none',
+        }}
+      >
+        <div ref={hostRef} />
+      </div>
+
       <div
         style={{
           width: '100%',
           background: 'rgba(14, 6, 26, 0.94)',
-          border: '1.5px solid #1db954',
-          borderRadius: '14px',
+          border: `1.5px solid ${SPOTIFY_GREEN}`,
+          borderRadius: '16px',
           padding: '10px 12px',
           boxShadow: '0 14px 40px rgba(0,0,0,0.9), 0 0 25px rgba(29, 185, 84, 0.35)',
           backdropFilter: 'blur(16px)',
         }}
       >
-        {/* Barra Superior do Player Spotify Vice City */}
+        {/* Cabeçalho estilo Spotify */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            marginBottom: minimized ? 0 : '8px',
+            marginBottom: minimized ? 0 : '10px',
             gap: '8px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <i className="fa-brands fa-spotify" style={{ color: '#1db954', fontSize: '18px' }} />
-            <span className="gta-title" style={{ color: '#fff', fontSize: '17px', letterSpacing: '1.5px' }}>
-              VICE CITY SPOTIFY RADIO
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <i className="fa-brands fa-spotify" style={{ color: SPOTIFY_GREEN, fontSize: '20px', flexShrink: 0 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span
+                className="gta-title"
+                style={{ color: '#fff', fontSize: '15px', letterSpacing: '1px', whiteSpace: 'nowrap' }}
+              >
+                VICE CITY SPOTIFY RADIO
+              </span>
+              <span style={{ color: SPOTIFY_GREEN, fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px' }}>
+                {TRACK.tag}
+              </span>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button
-              type="button"
-              onClick={switchSpotifyTrack}
-              title="Trocar faixa do Spotify"
-              style={{
-                background: 'rgba(255,255,255,0.1)',
-                border: '1px solid rgba(255,255,255,0.2)',
-                color: 'var(--neon-cyan)',
-                borderRadius: '6px',
-                padding: '3px 8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <i className="fa-solid fa-forward-step" style={{ marginRight: '4px' }} />
-              FAIXA
-            </button>
-
-            <button
-              type="button"
-              onClick={toggleSynthBackup}
-              title="Ligar/Desligar batida Synthwave auxiliar"
-              style={{
-                background: synthBackupActive ? 'var(--neon-pink)' : 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,42,133,0.4)',
-                color: '#fff',
-                borderRadius: '6px',
-                padding: '3px 8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              SYNTH
-            </button>
-
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            {minimized && (
+              <button
+                type="button"
+                onClick={togglePlay}
+                title={playing ? 'Pausar' : 'Tocar'}
+                style={{
+                  background: SPOTIFY_GREEN,
+                  border: 'none',
+                  color: '#000',
+                  borderRadius: '50%',
+                  width: '26px',
+                  height: '26px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                }}
+              >
+                <i className={`fa-solid ${playing ? 'fa-pause' : 'fa-play'}`} />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setMinimized((prev) => !prev)}
               title={minimized ? 'Expandir Player' : 'Minimizar Player'}
               style={{
-                background: 'rgba(255,255,255,0.1)',
-                border: 'none',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(29, 185, 84, 0.4)',
                 color: '#fff',
-                borderRadius: '6px',
-                padding: '3px 8px',
+                borderRadius: '8px',
+                padding: '4px 10px',
                 cursor: 'pointer',
                 fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
               }}
             >
-              <i className={`fa-solid ${minimized ? 'fa-expand' : 'fa-minus'}`} />
+              <i className={`fa-solid ${minimized ? 'fa-chevron-up' : 'fa-minus'}`} />
+              <span style={{ fontSize: '10px', fontWeight: 700 }}>{minimized ? 'EXPANDIR' : 'MIN'}</span>
             </button>
           </div>
         </div>
 
-        {/* Container do Spotify Embed (Prioritário) */}
-        <div style={{ display: minimized ? 'none' : 'block' }}>
-          <div ref={embedRef}>
-            <iframe
-              title="Spotify Vice City Player"
-              style={{ borderRadius: '10px', display: 'block' }}
-              src={`${currentTrack.embedUrl}&autoplay=1`}
-              width="100%"
-              height="80"
-              frameBorder="0"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+        {/* Corpo do player estilo Spotify */}
+        <div
+          style={{
+            display: minimized ? 'none' : 'block',
+            background: '#121212',
+            borderRadius: '12px',
+            padding: '12px',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <img
+              src={TRACK.cover}
+              alt="Capa da faixa"
+              style={{
+                width: '64px',
+                height: '64px',
+                objectFit: 'cover',
+                borderRadius: '6px',
+                flexShrink: 0,
+                boxShadow: '0 4px 14px rgba(0,0,0,0.6)',
+              }}
             />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p style={{ color: '#fff', fontWeight: 800, fontSize: '15px', margin: 0 }}>{TRACK.title}</p>
+              <p
+                style={{
+                  color: '#b3b3b3',
+                  fontSize: '12px',
+                  margin: '2px 0 0',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+                title={TRACK.artist}
+              >
+                {TRACK.artist}
+              </p>
+            </div>
           </div>
+
+          {/* Barra de progresso */}
+          <div style={{ marginTop: '12px' }}>
+            <div
+              role="slider"
+              aria-label="Progresso da faixa"
+              aria-valuemin={0}
+              aria-valuemax={Math.round(duration)}
+              aria-valuenow={Math.round(currentTime)}
+              tabIndex={0}
+              onClick={seekTo}
+              style={{
+                height: '4px',
+                background: 'rgba(255,255,255,0.2)',
+                borderRadius: '2px',
+                cursor: 'pointer',
+                position: 'relative',
+              }}
+            >
+              <div
+                style={{
+                  width: `${progress}%`,
+                  height: '100%',
+                  background: SPOTIFY_GREEN,
+                  borderRadius: '2px',
+                  transition: 'width 0.4s linear',
+                }}
+              />
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                color: '#b3b3b3',
+                fontSize: '10px',
+                marginTop: '4px',
+              }}
+            >
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
+            </div>
+          </div>
+
+          {/* Controles */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '18px', marginTop: '4px' }}>
+            <button type="button" onClick={toggleMute} title={muted ? 'Ativar som' : 'Silenciar'} style={iconButton}>
+              <i className={`fa-solid ${muted ? 'fa-volume-xmark' : 'fa-volume-high'}`} />
+            </button>
+            <button
+              type="button"
+              onClick={togglePlay}
+              disabled={!ready}
+              title={playing ? 'Pausar' : 'Tocar'}
+              style={{
+                background: '#fff',
+                border: 'none',
+                color: '#000',
+                borderRadius: '50%',
+                width: '38px',
+                height: '38px',
+                cursor: ready ? 'pointer' : 'wait',
+                fontSize: '14px',
+                opacity: ready ? 1 : 0.5,
+              }}
+            >
+              <i className={`fa-solid ${playing ? 'fa-pause' : 'fa-play'}`} style={{ marginLeft: playing ? 0 : '2px' }} />
+            </button>
+            <a
+              href={`https://www.youtube.com/watch?v=${TRACK.youtubeId}`}
+              target="_blank"
+              rel="noreferrer"
+              title="Abrir no YouTube"
+              style={{ ...iconButton, textDecoration: 'none' }}
+            >
+              <i className="fa-solid fa-arrow-up-right-from-square" />
+            </a>
+          </div>
+
+          {needsTap && !playing && (
+            <p style={{ color: SPOTIFY_GREEN, fontSize: '11px', textAlign: 'center', margin: '8px 0 0' }}>
+              Seu navegador bloqueou o autoplay. Toque no play para começar.
+            </p>
+          )}
         </div>
       </div>
     </div>
