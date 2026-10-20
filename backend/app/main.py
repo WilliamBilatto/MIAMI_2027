@@ -82,17 +82,19 @@ class ConfirmRequest(BaseModel):
         name: Nome ou apelido do amigo.
         email: E-mail para recebimento do dossiê.
         role_style: Perfil escolhido para a missão em Vice City.
+        trip_plan: Pacote de orçamento escolhido para a viagem.
 
     why:
         Validar estruturalmente o payload JSON enviado pelo formulário do Frontend.
 
     example:
-        payload = ConfirmRequest(name="Will", email="will@email.com", role_style="Piloto F1")
+        payload = ConfirmRequest(name="Will", email="will@email.com", role_style="Piloto F1", trip_plan="Plano 4")
     """
 
     name: str
     email: str
     role_style: str = "Vice City VIP"
+    trip_plan: str = "Combo Completo: F1 + Messi + Vice City"
 
 
 class InviteRequest(BaseModel):
@@ -188,7 +190,9 @@ def confirm_participant(payload: ConfirmRequest) -> dict[str, Any]:
         res = confirm_participant(ConfirmRequest(name="Leo", email="leo@email.com"))
     """
     try:
-        clean = validate_confirmation_payload(payload.name, payload.email, payload.role_style)
+        clean = validate_confirmation_payload(
+            payload.name, payload.email, payload.role_style, payload.trip_plan
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -196,6 +200,7 @@ def confirm_participant(payload: ConfirmRequest) -> dict[str, Any]:
         name=clean["name"],
         email=clean["email"],
         role_style=clean["role_style"],
+        trip_plan=clean["trip_plan"],
     )
 
     all_rows = list_all_participants()

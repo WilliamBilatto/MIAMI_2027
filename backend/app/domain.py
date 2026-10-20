@@ -11,7 +11,12 @@ from typing import Any
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
 
-def validate_confirmation_payload(name: str, email: str, role_style: str = "Vice City VIP") -> dict[str, str]:
+def validate_confirmation_payload(
+    name: str,
+    email: str,
+    role_style: str = "Vice City VIP",
+    trip_plan: str = "Combo Completo: F1 + Messi + Vice City",
+) -> dict[str, str]:
     """[Data]
     Valida e normaliza os dados de confirmação de presença enviados pelo usuário.
 
@@ -19,16 +24,19 @@ def validate_confirmation_payload(name: str, email: str, role_style: str = "Vice
         name: Nome ou apelido do participante.
         email: Endereço de e-mail para recebimento do dossiê.
         role_style: Estilo ou perfil escolhido pelo participante na viagem.
+        trip_plan: Pacote ou plano de orçamento escolhido para a viagem.
 
     why:
-        Garantir que apenas nomes e e-mails válidos sejam salvos e recebam o material.
+        Garantir que apenas nomes e e-mails válidos sejam salvos e recebam o material,
+        mantendo o perfil GTA separado do plano de orçamento.
 
     example:
-        clean = validate_confirmation_payload("Will", "will@email.com", "Piloto F1")
+        clean = validate_confirmation_payload("Will", "will@email.com", "Piloto F1", "Combo Completo: F1 + Messi + Vice City")
     """
     clean_name = (name or "").strip()
     clean_email = (email or "").strip().lower()
     clean_style = (role_style or "Vice City VIP").strip()
+    clean_plan = (trip_plan or "Combo Completo: F1 + Messi + Vice City").strip()
 
     if len(clean_name) < 2:
         raise ValueError("Informe um nome ou apelido com pelo menos 2 caracteres.")
@@ -40,6 +48,7 @@ def validate_confirmation_payload(name: str, email: str, role_style: str = "Vice
         "name": clean_name,
         "email": clean_email,
         "role_style": clean_style,
+        "trip_plan": clean_plan,
     }
 
 

@@ -16,21 +16,25 @@ from app.main import app
 
 def test_validate_confirmation_payload_success() -> None:
     """[Business]
-    Verifica se a validação normaliza nome e e-mail corretamente.
+    Verifica se a validação normaliza nome, e-mail, role_style e trip_plan corretamente.
 
     args:
         Nenhum argumento requerido.
 
     why:
-        Garantir que entradas válidas com espaços extras sejam limpas e aceitas.
+        Garantir que entradas válidas com espaços extras sejam limpas e aceitas,
+        mantendo o perfil GTA separado do plano de orçamento.
 
     example:
         test_validate_confirmation_payload_success()
     """
-    result = validate_confirmation_payload("  Will  ", "  WILL@Gmail.com ", "Piloto F1")
+    result = validate_confirmation_payload(
+        "  Will  ", "  WILL@Gmail.com ", "Piloto F1", "  Velocidade Máxima: Base + GP de F1  "
+    )
     assert result["name"] == "Will"
     assert result["email"] == "will@gmail.com"
     assert result["role_style"] == "Piloto F1"
+    assert result["trip_plan"] == "Velocidade Máxima: Base + GP de F1"
 
 
 def test_validate_confirmation_payload_invalid_email() -> None:
@@ -117,12 +121,23 @@ def test_api_endpoints_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
             "name": "Convidado 1",
             "email": "convidado1@vicecity.com",
             "role_style": "Camisa 10 no Chase Stadium",
+            "trip_plan": "Camisa 10: Base + Jogo do Messi",
         },
     )
     assert confirm_res.status_code == 200
     body = confirm_res.json()
     assert body["participant"]["status"] == "confirmed"
+    assert body["participant"]["role_style"] == "Camisa 10 no Chase Stadium"
+    assert body["participant"]["trip_plan"] == "Camisa 10: Base + Jogo do Messi"
     assert body["email_dispatch"]["delivered"] is True
+
+    updated_list = client.get("/api/participants").json()
+    assert any(
+        p["name"] == "Convidado 1"
+        and p["role_style"] == "Camisa 10 no Chase Stadium"
+        and p["trip_plan"] == "Camisa 10: Base + Jogo do Messi"
+        for p in updated_list["confirmed"]
+    )
 
     dossier_res = client.get("/api/dossier/download?name=Convidado%201")
     assert dossier_res.status_code == 200

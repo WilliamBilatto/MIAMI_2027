@@ -226,7 +226,7 @@ Para apresentar instantaneamente aos amigos sem provisionar serviços em nuvem:
 ```bash
 curl -X POST http://localhost:8000/api/participants/confirm \
   -H "Content-Type: application/json" \
-  -d '{"name": "Lucas", "email": "lucas@gmail.com", "role_style": "Piloto F1"}'
+  -d '{"name": "Lucas", "email": "lucas@gmail.com", "role_style": "Piloto F1", "trip_plan": "Combo Completo: F1 + Messi + Vice City"}'
 ```
 
 ## Testing

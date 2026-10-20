@@ -262,13 +262,20 @@ export default function App() {
   const [simIncludeShopping, setSimIncludeShopping] = useState(true);
 
   const [participants, setParticipants] = useState({
-    confirmed: [{ id: 1, name: 'Will (Organizador)', role_style: 'Chefe da Missão Vice City' }],
+    confirmed: [
+      {
+        id: 1,
+        name: 'Will (Organizador)',
+        role_style: 'Chefe da Missão Vice City',
+        trip_plan: 'Combo Completo: F1 + Messi + Vice City',
+      },
+    ],
     invited: [
-      { id: 2, name: 'Guilherme Nannini', role_style: 'Convocado Vice City' },
-      { id: 3, name: 'Lucas Belizario', role_style: 'Convocado Vice City' },
-      { id: 4, name: 'Franscico Carvalho', role_style: 'Convocado Vice City' },
-      { id: 5, name: 'Alexia Lima', role_style: 'Convocada Vice City' },
-      { id: 6, name: 'Bruna Siqueira', role_style: 'Convocada Vice City' },
+      { id: 2, name: 'Guilherme Nannini', role_style: 'Convocado Vice City', trip_plan: null },
+      { id: 3, name: 'Lucas Belizario', role_style: 'Convocado Vice City', trip_plan: null },
+      { id: 4, name: 'Franscico Carvalho', role_style: 'Convocado Vice City', trip_plan: null },
+      { id: 5, name: 'Alexia Lima', role_style: 'Convocada Vice City', trip_plan: null },
+      { id: 6, name: 'Bruna Siqueira', role_style: 'Convocada Vice City', trip_plan: null },
     ],
     confirmed_count: 1,
     wanted_stars: 1,
@@ -277,7 +284,8 @@ export default function App() {
   // Form states
   const [nameInput, setNameInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
-  const [roleInput, setRoleInput] = useState('Combo Completo: F1 + Messi + Vice City');
+  const [roleInput, setRoleInput] = useState('');
+  const [tripPlanInput, setTripPlanInput] = useState('Combo Completo: F1 + Messi + Vice City');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [newInviteName, setNewInviteName] = useState('');
@@ -337,7 +345,8 @@ export default function App() {
         body: JSON.stringify({
           name: nameInput,
           email: emailInput,
-          role_style: roleInput,
+          role_style: roleInput.trim() || 'Vice City VIP',
+          trip_plan: tripPlanInput,
         }),
       });
 
@@ -354,6 +363,7 @@ export default function App() {
       });
       setNameInput('');
       setEmailInput('');
+      setRoleInput('');
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -1297,9 +1307,34 @@ export default function App() {
                 <label
                   style={{ fontSize: '13px', fontWeight: 800, color: '#e4e4e7', display: 'block', marginBottom: '6px' }}
                 >
+                  SEU PAPEL NA MISSÃO / ESTILO
+                </label>
+                <input
+                  type="text"
+                  list="confirm-role-suggestions"
+                  placeholder="Ex: Piloto de F1 em Hard Rock, VIP nos Rooftops..."
+                  value={roleInput}
+                  onChange={(e) => setRoleInput(e.target.value)}
+                  className="gta-input"
+                />
+                <datalist id="confirm-role-suggestions">
+                  <option value="Convocado Vice City" />
+                  <option value="Piloto de F1 em Hard Rock" />
+                  <option value="Camisa 10 no Chase Stadium" />
+                  <option value="VIP nos Rooftops de Brickell" />
+                  <option value="Magnata de South Beach" />
+                  <option value="Mestre das Compras no Sawgrass" />
+                  <option value="Piloto de Lancha em Biscayne Bay" />
+                </datalist>
+              </div>
+
+              <div>
+                <label
+                  style={{ fontSize: '13px', fontWeight: 800, color: '#e4e4e7', display: 'block', marginBottom: '6px' }}
+                >
                   QUAL PLANO DE ORÇAMENTO MAIS TE ATRAI?
                 </label>
-                <select value={roleInput} onChange={(e) => setRoleInput(e.target.value)} className="gta-input">
+                <select value={tripPlanInput} onChange={(e) => setTripPlanInput(e.target.value)} className="gta-input">
                   <option value="Combo Completo: F1 + Messi + Vice City">
                     Plano 4 — Combo Completo (F1 + Messi + Vice City)
                   </option>
@@ -1432,8 +1467,26 @@ export default function App() {
                       {person.name}
                     </p>
                     <p style={{ fontSize: '13px', color: '#d4d4d8', marginTop: '2px' }}>
-                      {person.role_style || 'Vice City VIP'}
+                      {person.role_style}
                     </p>
+                    {person.trip_plan && (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: 'var(--neon-yellow)',
+                          background: 'rgba(255, 230, 0, 0.12)',
+                          border: '1px solid rgba(255, 230, 0, 0.3)',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          display: 'inline-block',
+                          marginTop: '6px',
+                        }}
+                      >
+                        <i className="fa-solid fa-receipt" style={{ marginRight: '5px' }} />
+                        {person.trip_plan}
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span
@@ -1513,8 +1566,11 @@ export default function App() {
                 {participants.invited.map((person) => (
                   <li
                     key={person.id || person.name}
-                    onClick={() => setNameInput(person.name)}
-                    title="Clique para preencher seu nome no formulário ao lado!"
+                    onClick={() => {
+                      setNameInput(person.name);
+                      if (person.role_style) setRoleInput(person.role_style);
+                    }}
+                    title="Clique para preencher seu nome e estilo no formulário ao lado!"
                     style={{
                       background: 'rgba(255, 42, 133, 0.08)',
                       border: '1px solid rgba(255, 42, 133, 0.28)',

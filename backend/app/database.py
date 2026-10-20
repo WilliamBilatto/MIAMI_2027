@@ -31,36 +31,42 @@ DEFAULT_SEED_PARTICIPANTS = [
         "email": os.getenv("ORGANIZER_EMAIL", "organizador@vicecity.com"),
         "status": "confirmed",
         "role_style": "Chefe da Missão Vice City",
+        "trip_plan": "Combo Completo: F1 + Messi + Vice City",
     },
     {
         "name": "Guilherme Nannini",
         "email": None,
         "status": "invited",
         "role_style": "Convocado Vice City",
+        "trip_plan": None,
     },
     {
         "name": "Lucas Belizario",
         "email": None,
         "status": "invited",
         "role_style": "Convocado Vice City",
+        "trip_plan": None,
     },
     {
         "name": "Franscico Carvalho",
         "email": None,
         "status": "invited",
         "role_style": "Convocado Vice City",
+        "trip_plan": None,
     },
     {
         "name": "Alexia Lima",
         "email": None,
         "status": "invited",
         "role_style": "Convocada Vice City",
+        "trip_plan": None,
     },
     {
         "name": "Bruna Siqueira",
         "email": None,
         "status": "invited",
         "role_style": "Convocada Vice City",
+        "trip_plan": None,
     },
 ]
 
@@ -145,9 +151,14 @@ def init_db(custom_path: str | Path | None = None) -> str | Path:
                         email TEXT,
                         status TEXT NOT NULL DEFAULT 'invited',
                         role_style TEXT NOT NULL DEFAULT 'Vice City VIP',
+                        trip_plan TEXT DEFAULT 'Combo Completo: F1 + Messi + Vice City',
                         confirmed_at TEXT
                     );
                     """
+                )
+                # Migração segura para tabela existente
+                cur.execute(
+                    "ALTER TABLE participants ADD COLUMN IF NOT EXISTS trip_plan TEXT DEFAULT 'Combo Completo: F1 + Messi + Vice City';"
                 )
                 cur.execute("SELECT COUNT(*) AS count FROM participants;")
                 row = cur.fetchone()
@@ -157,14 +168,15 @@ def init_db(custom_path: str | Path | None = None) -> str | Path:
                     for item in DEFAULT_SEED_PARTICIPANTS:
                         cur.execute(
                             """
-                            INSERT INTO participants (name, email, status, role_style, confirmed_at)
-                            VALUES (%s, %s, %s, %s, %s);
+                            INSERT INTO participants (name, email, status, role_style, trip_plan, confirmed_at)
+                            VALUES (%s, %s, %s, %s, %s, %s);
                             """,
                             (
                                 item["name"],
                                 item["email"],
                                 item["status"],
                                 item["role_style"],
+                                item.get("trip_plan"),
                                 now_iso if item["status"] == "confirmed" else None,
                             ),
                         )
@@ -181,10 +193,19 @@ def init_db(custom_path: str | Path | None = None) -> str | Path:
                 email TEXT,
                 status TEXT NOT NULL DEFAULT 'invited',
                 role_style TEXT NOT NULL DEFAULT 'Vice City VIP',
+                trip_plan TEXT DEFAULT 'Combo Completo: F1 + Messi + Vice City',
                 confirmed_at TEXT
             )
             """
         )
+        # Migração segura para SQLite existente
+        cursor_info = conn.execute("PRAGMA table_info(participants)")
+        existing_cols = [row[1] for row in cursor_info.fetchall()]
+        if "trip_plan" not in existing_cols:
+            conn.execute(
+                "ALTER TABLE participants ADD COLUMN trip_plan TEXT DEFAULT 'Combo Completo: F1 + Messi + Vice City'"
+            )
+
         cursor = conn.execute("SELECT COUNT(*) FROM participants")
         count = cursor.fetchone()[0]
         if count == 0:
@@ -192,14 +213,15 @@ def init_db(custom_path: str | Path | None = None) -> str | Path:
             for item in DEFAULT_SEED_PARTICIPANTS:
                 conn.execute(
                     """
-                    INSERT INTO participants (name, email, status, role_style, confirmed_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO participants (name, email, status, role_style, trip_plan, confirmed_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         item["name"],
                         item["email"],
                         item["status"],
                         item["role_style"],
+                        item.get("trip_plan"),
                         now_iso if item["status"] == "confirmed" else None,
                     ),
                 )
@@ -225,7 +247,7 @@ def list_all_participants(custom_path: str | Path | None = None) -> list[dict[st
         with get_pg_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id, name, email, status, role_style, confirmed_at FROM participants ORDER BY id ASC;"
+                    "SELECT id, name, email, status, role_style, trip_plan, confirmed_at FROM participants ORDER BY id ASC;"
                 )
                 rows = cur.fetchall()
                 return [dict(r) for r in rows]
@@ -234,7 +256,7 @@ def list_all_participants(custom_path: str | Path | None = None) -> list[dict[st
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
-            "SELECT id, name, email, status, role_style, confirmed_at FROM participants ORDER BY id ASC"
+            "SELECT id, name, email, status, role_style, trip_plan, confirmed_at FROM participants ORDER BY id ASC"
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -243,22 +265,26 @@ def upsert_confirmed_participant(
     name: str,
     email: str,
     role_style: str = "Vice City VIP",
+    trip_plan: str = "Combo Completo: F1 + Messi + Vice City",
     custom_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """[System]
-    Registra ou atualiza um participante como confirmado ('confirmed') no banco.
+    Registra ou atualiza um participante como confirmado ('confirmed') no banco,
+    gravando seu papel GTA (role_style) e o plano de orçamento escolhido (trip_plan).
 
     args:
         name: Nome validado do participante.
         email: E-mail validado do participante.
         role_style: Perfil escolhido pelo participante na viagem.
+        trip_plan: Plano de orçamento selecionado.
         custom_path: Caminho opcional do banco SQLite.
 
     why:
-        Mover um convidado para a lista 'Tá Dentro' ou adicionar um novo amigo de forma idempotente.
+        Mover um convidado para a lista 'Tá Dentro' ou adicionar um novo amigo de forma idempotente,
+        mantendo estilo e plano de viagem estritamente separados.
 
     example:
-        saved = upsert_confirmed_participant("Lucas Belizario", "lucas@email.com", "Piloto F1")
+        saved = upsert_confirmed_participant("Lucas Belizario", "lucas@email.com", "Piloto F1", "Plano 4")
     """
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -267,30 +293,35 @@ def upsert_confirmed_participant(
         with get_pg_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id FROM participants WHERE LOWER(email) = LOWER(%s) OR LOWER(name) = LOWER(%s);",
+                    "SELECT id, role_style FROM participants WHERE LOWER(email) = LOWER(%s) OR LOWER(name) = LOWER(%s);",
                     (email, name),
                 )
                 existing = cur.fetchone()
                 if existing:
                     participant_id = existing["id"]
+                    final_role = (
+                        role_style
+                        if role_style and role_style != "Vice City VIP"
+                        else (existing.get("role_style") or role_style or "Vice City VIP")
+                    )
                     cur.execute(
                         """
                         UPDATE participants
-                        SET name = %s, email = %s, status = 'confirmed', role_style = %s, confirmed_at = %s
+                        SET name = %s, email = %s, status = 'confirmed', role_style = %s, trip_plan = %s, confirmed_at = %s
                         WHERE id = %s
-                        RETURNING id, name, email, status, role_style, confirmed_at;
+                        RETURNING id, name, email, status, role_style, trip_plan, confirmed_at;
                         """,
-                        (name, email, role_style, now_iso, participant_id),
+                        (name, email, final_role, trip_plan, now_iso, participant_id),
                     )
                     updated = cur.fetchone()
                 else:
                     cur.execute(
                         """
-                        INSERT INTO participants (name, email, status, role_style, confirmed_at)
-                        VALUES (%s, %s, 'confirmed', %s, %s)
-                        RETURNING id, name, email, status, role_style, confirmed_at;
+                        INSERT INTO participants (name, email, status, role_style, trip_plan, confirmed_at)
+                        VALUES (%s, %s, 'confirmed', %s, %s, %s)
+                        RETURNING id, name, email, status, role_style, trip_plan, confirmed_at;
                         """,
-                        (name, email, role_style, now_iso),
+                        (name, email, role_style, trip_plan, now_iso),
                     )
                     updated = cur.fetchone()
                 conn.commit()
@@ -300,33 +331,38 @@ def upsert_confirmed_participant(
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         existing = conn.execute(
-            "SELECT id FROM participants WHERE LOWER(email) = LOWER(?) OR LOWER(name) = LOWER(?)",
+            "SELECT id, role_style FROM participants WHERE LOWER(email) = LOWER(?) OR LOWER(name) = LOWER(?)",
             (email, name),
         ).fetchone()
 
         if existing:
             participant_id = existing["id"]
+            final_role = (
+                role_style
+                if role_style and role_style != "Vice City VIP"
+                else (existing["role_style"] or role_style or "Vice City VIP")
+            )
             conn.execute(
                 """
                 UPDATE participants
-                SET name = ?, email = ?, status = 'confirmed', role_style = ?, confirmed_at = ?
+                SET name = ?, email = ?, status = 'confirmed', role_style = ?, trip_plan = ?, confirmed_at = ?
                 WHERE id = ?
                 """,
-                (name, email, role_style, now_iso, participant_id),
+                (name, email, final_role, trip_plan, now_iso, participant_id),
             )
         else:
             cursor = conn.execute(
                 """
-                INSERT INTO participants (name, email, status, role_style, confirmed_at)
-                VALUES (?, ?, 'confirmed', ?, ?)
+                INSERT INTO participants (name, email, status, role_style, trip_plan, confirmed_at)
+                VALUES (?, ?, 'confirmed', ?, ?, ?)
                 """,
-                (name, email, role_style, now_iso),
+                (name, email, role_style, trip_plan, now_iso),
             )
             participant_id = cursor.lastrowid
 
         conn.commit()
         updated = conn.execute(
-            "SELECT id, name, email, status, role_style, confirmed_at FROM participants WHERE id = ?",
+            "SELECT id, name, email, status, role_style, trip_plan, confirmed_at FROM participants WHERE id = ?",
             (participant_id,),
         ).fetchone()
 
@@ -362,9 +398,9 @@ def add_invited_friend(
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO participants (name, email, status, role_style, confirmed_at)
-                    VALUES (%s, NULL, 'invited', %s, NULL)
-                    RETURNING id, name, email, status, role_style, confirmed_at;
+                    INSERT INTO participants (name, email, status, role_style, trip_plan, confirmed_at)
+                    VALUES (%s, NULL, 'invited', %s, NULL, NULL)
+                    RETURNING id, name, email, status, role_style, trip_plan, confirmed_at;
                     """,
                     (clean_name, role_style),
                 )
@@ -377,14 +413,14 @@ def add_invited_friend(
         conn.row_factory = sqlite3.Row
         cursor = conn.execute(
             """
-            INSERT INTO participants (name, email, status, role_style, confirmed_at)
-            VALUES (?, NULL, 'invited', ?, NULL)
+            INSERT INTO participants (name, email, status, role_style, trip_plan, confirmed_at)
+            VALUES (?, NULL, 'invited', ?, NULL, NULL)
             """,
             (clean_name, role_style),
         )
         conn.commit()
         row = conn.execute(
-            "SELECT id, name, email, status, role_style, confirmed_at FROM participants WHERE id = ?",
+            "SELECT id, name, email, status, role_style, trip_plan, confirmed_at FROM participants WHERE id = ?",
             (cursor.lastrowid,),
         ).fetchone()
     return dict(row)
